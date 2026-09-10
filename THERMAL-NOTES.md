@@ -1,5 +1,23 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Eight-hour follow-up (user authorized 90 C cutoffs)
+
+User requested 8 hours, terminating on CPU or any TT at 90 C. Added native
+`cpu_temperature_limit` API field (default remains 95, this run uses 90),
+TT limit90 and existing lower per-device firmware limits still apply.
+CPU and memory workers0, trace replay2048, CPU temporary max1.5GHz.
+Supervisor: transient root systemd unit `tt-thermal-soak-8h`, bounded28900s,
+launches `/tmp/tt-capped-trace-pilot.py` and `/tmp/tt-trace-pilot.py`.
+The first launch cancelled before workers because telemetry was not yet fresh
+after app restart; no heat test occurred. Added baseline freshness wait before
+starting and relaunched after confirming the original unit terminated.
+Check live systemd/API state for current run identity and outcome; do not
+restart a live run. Journal holds supervisor samples and plateau notices;
+SQLite holds continuous one-second raw data. CPU limit restoration is in the
+supervisor finally block. Plateau detection logs but does not stop the 8h run.
+Native and external temperature cutoffs are reactive, not guaranteed peak
+temperature ceilings. Remote dashboard access remains intentionally open.
+
 ## TT trace replay and shared heat experiment
 
 Opt-in API `tt_trace: true` now captures 256 reusable-output matmuls and

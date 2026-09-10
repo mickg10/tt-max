@@ -70,13 +70,15 @@ def tt_snapshot():
 def normalize_config(raw):
     cfg = {"duration": 60, "cpu_workers": os.cpu_count() or 1, "memory_gb": 1,
            "tt": True, "tt_devices": "all", "matrix_size": 2048,
-           "mode": "balanced", "temperature_limit": 85, "tt_trace": False}
+           "mode": "balanced", "temperature_limit": 85, "tt_trace": False,
+           "cpu_temperature_limit": 95}
     unknown = set(raw) - set(cfg)
     if unknown:
         raise ValueError(f"Unknown options: {', '.join(sorted(unknown))}")
     cfg.update(raw)
     for key, low, high in (("duration", 1, 172800), ("cpu_workers", 0, os.cpu_count() or 1),
-                           ("matrix_size", 256, 8192), ("temperature_limit", 40, 95)):
+                           ("matrix_size", 256, 8192), ("temperature_limit", 40, 95),
+                           ("cpu_temperature_limit", 40, 95)):
         value = cfg[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or int(value) != value or not low <= value <= high:
             raise ValueError(f"{key} must be an integer between {low} and {high}")
@@ -373,8 +375,8 @@ class Engine:
         with self.lock:
             tt = copy.deepcopy(self.telemetry["tt"])
             cpu_temp = self.telemetry.get("cpu_temperature_c")
-        if cpu_temp is not None and cpu_temp >= 95:
-            raise RuntimeError(f"Stopped: CPU reached {cpu_temp} °C (95 °C cutoff)")
+        if cpu_temp is not None and cpu_temp >= cfg["cpu_temperature_limit"]:
+            raise RuntimeError(f"Stopped: CPU reached {cpu_temp} °C ({cfg['cpu_temperature_limit']} °C cutoff)")
         if ids:
             if tt.get("error") or time.time() - tt.get("sampled_at", 0) > 12:
                 raise RuntimeError("Stopped: TT telemetry unavailable or stale")
