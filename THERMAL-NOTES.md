@@ -1,5 +1,16 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## First provisional plateau window
+
+Supervisor journal at 2026-09-10 16:44:53 host time logged the first observed
+qualifying five-minute window for run2ba8b0226ea4, about31.5min into the run:
+CPU/TT slopes .0902/.0992/.0145/.0719/.0845 C/min. Supervisor also required
+CPU and TT power stability between window halves (within max2W or5%).
+Current sensor values near80C CPU and80–83C TT. This is a rolling-window
+threshold crossing, not yet eight-hour stability. Throughput near304TFLOP/s
+at this point versus~396 early, so do not describe it as equilibrium at the
+initial cold-device power or throughput. Run continues; no settings changed.
+
 ## 25-minute checkpoint: strong cross-heating, not absolute coolant thermometry
 
 Run2ba8b0226ea4 remains live under the original supervisor (observed1541s).
