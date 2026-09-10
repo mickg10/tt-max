@@ -1,5 +1,48 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Follow-up: guarded CPU pulse and validation
+
+CPU-only pilot `f886d5c9d64d` started at Unix 1789053424.8322458,
+two CPU workers, zero memory workers, TT disabled, planned timeout 60 seconds.
+An external one-second watchdog stopped it at 1789053425.8507438 after
+observing 91.25 C against its conservative 80 C threshold. The threshold is
+a reactive stop, not a guaranteed temperature ceiling. No second pulse was
+launched. The native 95 C guard was not raised.
+
+SQLite snapshot retained on nas642 and q4 at
+`/tmp/tt-thermal-model-20260910.sqlite3`, made with SQLite online backup.
+The recorded CPU jumped from 54.125 to 91.25 C; package energy-derived power
+was 49.12 W over that sample interval, not an instantaneous peak power.
+It returned to approximately 19 W within several seconds. Fitting CPU data
+between Unix 1789053428 and 1789053486 gives a local apparent decay constant
+of 6.54 seconds, floor 54.04 C, RMSE 0.081 C. Sensor filtering may contribute;
+this is not a calibrated block resistance or a coolant temperature.
+
+TT temperature medians in the minute before / minute after the pulse:
+`[39.4,40.4,39.1,40.5]` / `[39.4,40.4,39.1,40.4]` C.
+No clear cross heating is resolved. A one-second pulse deposits too little
+energy to rule out coupling through a minutes-scale loop. TT chip power had
+brief telemetry excursions, so perfect constant receiver power is not assumed.
+
+Held-out-tail check on the earlier 403-sample passive trace: ten-second
+medians, train from 30 to 420 seconds, forecast the remaining 39 bins without
+refitting. Common tau estimated from training alone: 190.92 seconds.
+Held-out RMSE CPU/TT0/TT1/TT2/TT3:
+`[0.525,0.359,0.295,0.278,0.313]` C. A constant forecast using the median of
+the final six training bins yields `[0.452,0.242,0.250,0.412,0.332]` C.
+Thus the decay forecast is not consistently better than simple persistence.
+This is a same-cooldown holdout, NOT independent cross-heating validation.
+The 151–191-second results demonstrate fitting sensitivity; none is a
+confidence interval or a measured liquid residence time.
+
+Current conclusion: evidence supports two apparent timescales (fast CPU-local,
+slow common cooling after mixed load). It is consistent with loop heat soak,
+but does not establish coolant temperature, adequate flow, or radiator fault.
+Further active pulses are on hold after the fast CPU excursion. Needed next:
+CPU block model and visible inlet/outlet/loop routing, plus radiator-intake
+air temperature or a verified coolant/flow reading. No cooling-control writes
+or physical plumbing changes have been made. Goal remains incomplete.
+
 ## Measured passive cooldown
 
 Input artifact on nas642: `/tmp/tt-thermal-q4.jsonl`, 403 two-second
