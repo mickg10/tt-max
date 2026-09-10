@@ -105,3 +105,39 @@ def test_missing_board_power_is_unavailable(monkeypatch):
     raw = {"device_info": [{"board_info": {"board_id": "x"}, "telemetry": {}}]}
     monkeypatch.setattr("tt_max.engine.subprocess.run", lambda *a, **k: type("Result", (), {"stdout": json.dumps(raw)})())
     assert tt_snapshot()["board_power_w"] is None
+
+
+def test_overlapping_controllers_refused():
+    first, second = Engine(), Engine()
+    try:
+        first.start({"tt": False, "duration": 30, "cpu_workers": 1, "memory_gb": 0})
+        deadline = time.monotonic() + 5
+        while not first.processes and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert first.processes
+        second.start({"tt": False, "duration": 5, "cpu_workers": 1, "memory_gb": 0})
+        wait(second)
+        assert second.report()["state"] == "failed"
+        assert "Another TT Max controller" in second.report()["error"]
+        assert not second.processes
+    finally:
+        first.close()
+        second.close()
+
+
+def test_thermal_trip_stops_real_worker(monkeypatch):
+    engine = Engine()
+    try:
+        engine.start({"tt": False, "duration": 30, "cpu_workers": 1, "memory_gb": 0})
+        deadline = time.monotonic() + 5
+        while not engine.processes and time.monotonic() < deadline:
+            time.sleep(.05)
+        assert engine.processes
+        with engine.lock:
+            engine.telemetry["cpu_temperature_c"] = 100
+        wait(engine)
+        assert engine.report()["state"] == "failed"
+        assert "CPU reached" in engine.report()["error"]
+        assert all(proc.poll() is not None for proc in engine.processes)
+    finally:
+        engine.close()

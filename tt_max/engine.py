@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -221,14 +222,21 @@ class Engine:
         guard = None
         state = "completed"
         try:
-            # Serialize app runs per user (CLI and dashboard included).
-            lock_dir = Path.home() / ".cache" / "tt-max"
-            lock_dir.mkdir(parents=True, exist_ok=True)
-            guard = (lock_dir / "run.lock").open("a")
+            # Cooperating controllers share a host-wide lock across Unix users.
+            # Linux permits flock(LOCK_EX) on a read-only descriptor. Reject symlinks.
+            flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+            try:
+                fd = os.open("/tmp/tt-max.run.lock", flags | os.O_CREAT | os.O_EXCL, 0o644)
+                os.fchmod(fd, 0o644)
+            except FileExistsError:
+                fd = os.open("/tmp/tt-max.run.lock", flags)
+            guard = os.fdopen(fd, "r")
+            if not stat.S_ISREG(os.fstat(guard.fileno()).st_mode):
+                raise RuntimeError("The TT Max lock path is not a regular file")
             try:
                 fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise RuntimeError("Another TT Max controller is running a benchmark") from None
+                raise RuntimeError("Another TT Max controller on this host is running a benchmark") from None
             ids = []
             if cfg["tt"]:
                 if not Path(self.tt_python).is_file() and not shutil.which(self.tt_python):
