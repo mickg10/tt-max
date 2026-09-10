@@ -264,6 +264,14 @@ class Engine:
                 self.run["state"] = "running"
             if ids:
                 self._spawn("tt", deadline, devices=",".join(str(i) for i in ids), size=cfg["matrix_size"])
+                self._log("Preparing and verifying TT tensors before starting CPU/memory load")
+                while time.monotonic() < deadline and not self.stop_event.wait(.1):
+                    self._check_health(cfg, ids)
+                    with self.lock:
+                        if self.run["workers"][0].get("verified"):
+                            break
+                if not self.stop_event.is_set() and time.monotonic() >= deadline:
+                    raise RuntimeError("Time budget expired preparing TT; CPU/memory load was not started")
             for _ in range(cfg["cpu_workers"]):
                 if self.stop_event.is_set() or time.monotonic() >= deadline:
                     break
@@ -271,26 +279,7 @@ class Engine:
             if cfg["memory_gb"] and not self.stop_event.is_set() and time.monotonic() < deadline:
                 self._spawn("memory", deadline, bytes=int(cfg["memory_gb"] * GIB))
             while time.monotonic() < deadline and not self.stop_event.wait(0.2):
-                failed = [p for p in self.processes if p.poll() not in (None, 0)]
-                if failed:
-                    raise RuntimeError(f"Worker failed: PID {failed[0].pid}, exit {failed[0].returncode}; see log")
-                if psutil.virtual_memory().available < max(512 * 1024 ** 2, psutil.virtual_memory().total * 0.02):
-                    raise RuntimeError("Stopped: available memory below emergency reserve")
-                with self.lock:
-                    tt = copy.deepcopy(self.telemetry["tt"])
-                    cpu_temp = self.telemetry.get("cpu_temperature_c")
-                if cpu_temp is not None and cpu_temp >= 95:
-                    raise RuntimeError(f"Stopped: CPU reached {cpu_temp} °C (95 °C cutoff)")
-                if ids:
-                    if tt.get("error") or time.time() - tt.get("sampled_at", 0) > 12:
-                        raise RuntimeError("Stopped: TT telemetry unavailable or stale")
-                    if any(not any(d["id"] == i and d["temperature_c"] is not None for d in tt["devices"]) for i in ids):
-                        raise RuntimeError("Stopped: a selected TT device has no temperature reading")
-                    for d in tt["devices"]:
-                        if d["id"] in ids and d["temperature_c"] is not None:
-                            limit = min(cfg["temperature_limit"], d.get("thermal_limit_c") or cfg["temperature_limit"])
-                            if d["temperature_c"] >= limit:
-                                raise RuntimeError(f"Stopped: TT {d['id']} reached {d['temperature_c']} °C (limit {limit})")
+                self._check_health(cfg, ids)
             if self.stop_event.is_set():
                 state = "cancelled"
         except Exception as exc:
@@ -320,6 +309,28 @@ class Engine:
                 self.run["finished_at"] = time.time()
             if guard:
                 guard.close()
+
+    def _check_health(self, cfg, ids):
+        failed = [p for p in self.processes if p.poll() not in (None, 0)]
+        if failed:
+            raise RuntimeError(f"Worker failed: PID {failed[0].pid}, exit {failed[0].returncode}; see log")
+        if psutil.virtual_memory().available < max(512 * 1024 ** 2, psutil.virtual_memory().total * 0.02):
+            raise RuntimeError("Stopped: available memory below emergency reserve")
+        with self.lock:
+            tt = copy.deepcopy(self.telemetry["tt"])
+            cpu_temp = self.telemetry.get("cpu_temperature_c")
+        if cpu_temp is not None and cpu_temp >= 95:
+            raise RuntimeError(f"Stopped: CPU reached {cpu_temp} °C (95 °C cutoff)")
+        if ids:
+            if tt.get("error") or time.time() - tt.get("sampled_at", 0) > 12:
+                raise RuntimeError("Stopped: TT telemetry unavailable or stale")
+            if any(not any(d["id"] == i and d["temperature_c"] is not None for d in tt["devices"]) for i in ids):
+                raise RuntimeError("Stopped: a selected TT device has no temperature reading")
+            for d in tt["devices"]:
+                if d["id"] in ids and d["temperature_c"] is not None:
+                    limit = min(cfg["temperature_limit"], d.get("thermal_limit_c") or cfg["temperature_limit"])
+                    if d["temperature_c"] >= limit:
+                        raise RuntimeError(f"Stopped: TT {d['id']} reached {d['temperature_c']} °C (limit {limit})")
 
     def _cleanup(self, graceful=False):
         # Workers stop at their own deadline. Let interpreter/device teardown finish
