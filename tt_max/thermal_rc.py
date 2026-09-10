@@ -9,7 +9,7 @@ import numpy as np
 
 def simulate(times, heat_w, air_c, capacities, block_conductances,
              radiator_conductance, initial_c, room_capacity=None,
-             room_loss=None):
+             room_loss=None, room_heat_w=None):
     """Exact zero-order-hold simulation with actual sample intervals.
 
     State order: devices, shared sink, optional room. Without a room state,
@@ -17,6 +17,13 @@ def simulate(times, heat_w, air_c, capacities, block_conductances,
     radiator heat enters the room and room_loss conducts heat out of it.
     Capacities: one J/K value per device plus shared sink. Conductances: W/K.
     Heat has shape (time, devices); interval k uses heat_w[k] and air_c[k].
+    Optional room_heat_w has shape (time,) and adds heat directly to the room,
+    bypassing the modeled device-to-coolant path. For example, partition a
+    measured electrical input P into heat_w=f*P and room_heat_w=(1-f)*P;
+    do not add the full P again as room heat. Neither P nor f is inferred here.
+    This additional path requires the room state; measured inlet air already
+    acts as a boundary condition without it. It does not model local exhaust
+    recirculation or an additional device-to-case-air thermal resistance.
     """
     t, q, air = map(lambda a: np.asarray(a, dtype=float), (times, heat_w, air_c))
     c = np.asarray(capacities, dtype=float)
@@ -32,11 +39,16 @@ def simulate(times, heat_w, air_c, capacities, block_conductances,
     room = room_capacity is not None
     if room and (room_capacity <= 0 or room_loss is None or room_loss <= 0):
         raise ValueError('Room capacity and heat loss must be positive')
+    if room_heat_w is not None and not room:
+        raise ValueError('Direct room heat requires a room state')
+    room_heat = np.zeros_like(t) if room_heat_w is None else np.asarray(room_heat_w, dtype=float)
+    if room_heat.shape != t.shape:
+        raise ValueError('Room heat must have one value per time sample')
     if room:
         c = np.append(c, room_capacity)
     if initial.shape != c.shape:
         raise ValueError('Initial state shape mismatch')
-    if not all(np.isfinite(a).all() for a in (t, q, air, c, g, initial)):
+    if not all(np.isfinite(a).all() for a in (t, q, air, c, g, initial, room_heat)):
         raise ValueError('Inputs must be finite')
     if not np.isfinite(radiator_conductance) or (room and not np.isfinite(room_loss)):
         raise ValueError('Conductances must be finite')
@@ -61,6 +73,8 @@ def simulate(times, heat_w, air_c, capacities, block_conductances,
     for k, dt in enumerate(np.diff(t)):
         source = np.zeros(len(c)); source[:n] = q[k]
         source[-1] += boundary * air[k]
+        if room:
+            source[-1] += room_heat[k]
         decay = np.exp(-eig * dt)
         gain = -np.expm1(-eig * dt) / eig
         state = vectors.T @ (root_c * result[k])

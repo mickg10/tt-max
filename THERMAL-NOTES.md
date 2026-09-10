@@ -1,5 +1,136 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Revised mass constraint and late-tail forecasts (17:51 UTC)
+
+User revised the estimate to **3–4 litres of water in a roughly 30 lb
+(13.6 kg) complete computer**, with CPU and TT devices on the liquid loop,
+motherboard RAM outside it, and few other heatsinks. This supersedes the
+earlier under-3-litre estimate below. Water contributes roughly 12.5–16.7
+kJ/K. Counting all remaining 9.6–10.6 kg with metal-like specific heats
+0.4–0.9 kJ/(kg K) gives a whole-box scenario of about 17–26 kJ/K. Not all
+that hardware follows coolant temperature; this is not a measured loop
+capacity. A deliberately generous 36 kJ/K sensitivity case allows a much
+higher average non-water specific heat. Neither range is a strict bound
+without a material inventory and coupling information. Representative heat
+capacities: [OpenStax reference table](https://openstax.org/books/physics/pages/a-reference-tables).
+
+CPU package and TT chip telemetry do not contain motherboard DIMM power;
+do not subtract a speculative RAM contribution from their sum. On q4,
+tt-smi 6.5 reads chip power from the low 16 bits of firmware TDP, separately
+from board INPUT_POWER; board readings remain discrepant across same-board
+chips. Late TT chip-rail mean is approximately 450 W and CPU package about
+21 W. Additional board memory, conversion losses, fans/pump and other
+system heat are separate, incompletely measured quantities. This is not
+a claim that exactly 471 W reaches the water or that a wall meter reads471 W.
+
+CPU median rose80.25→81.5 C between window midpoints42.5→87.5 min, about
+0.0278 C/min, at nearly constant measured power. At 0.02 C/min, the17–26
+kJ/K scenario stores5.7–8.7 W; even36 kJ/K stores12 W. At0.05 C/min the
+generous36 kJ/K case stores30 W. These estimates assume the represented
+thermal mass shares the measured slope; CPU/TT sensors are not coolant
+thermometers. If235–471 W is entering the loop, the late model is already
+rejecting most of it. Hundreds of watts accumulating in a common-temperature
+hidden computer mass is not a credible explanation of this slow drift.
+
+This does NOT exclude a small, long internal tail. For a main lumped
+radiator path, tau=C*delta_T_radiator/Q. Example C=20 kJ/K, Q=470 W and
+water-to-inlet delta30 K gives tau21.3 min and about64 min to95% settling.
+The same tau results from half the heat and half the delta. A small weakly
+coupled mass can have another slow pole without storing much power.
+Neither water-to-air delta nor captured heat has been measured.
+
+The recorded CPU curve has an early fast rise and a slow tail. A retrospective
+shape comparison trained on5-minute medians at7.5–62.5 min, then evaluated
+at67.5–87.5 min, gives held-out RMSE0.684 C for one exponential,0.134 C
+for two positive exponentials, and0.117 C for an exponential plus a ramp.
+These data had already been inspected: this is NOT independent validation.
+The latter two shapes fit similarly, and do not identify the slow state as
+room air versus another internal mass. They omit actual power as an input.
+
+Parameters and data are frozen in
+`thermal-analysis/20260910-q4-cpu-tail.json`. Prospectively, at120 min the
+two-exponential model predicts81.63 C CPU while the ramp model predicts
+82.75 C; at180 min81.88 versus84.72 C. Compare these to five-minute CPU
+medians centered on the stated times, only if the same run/load persists;
+do not refit and call the changed prediction a successful forecast. These
+are model-discrimination hypotheses, not safe temperature ceilings or
+control settings. At17:51 UTC the original run2ba8b0226ea4 was active at
+98.3 min, CPU81.75 C and hottest TT85.8 C; fresh telemetry, no run/recorder
+error. The90 C guards and8-hour timeout remain unchanged.
+
+Practical conclusion: strong shared-sink warming, now near heat balance
+under the stated assumptions. Slowly warming room/inlet air is a good
+candidate for the late drift, not a demonstrated exclusive cause. A warm
+quasi-steady loop and room soak can coexist. Need actual inlet-air history
+to discriminate them; do not label SYSTIN41 C as measured room temperature.
+
+## CPU bursts: local junction-to-water rise on top of the shared sink
+
+For a short burst the bulk water is approximately fixed. At100 W, one second
+adds100 J, enough to raise3–4 litres by only0.006–0.008 C even with zero
+radiator rejection. A many-degree CPU jump on that timescale is therefore
+local, not the bulk water warming. The observed earlier pulse rose54.125→
+91.25 C in about one sample; that37.125 C is a rise from the previous CPU
+reading, NOT a measured CPU-to-water difference. Its one-second package
+power average cannot identify a peak junction-to-water thermal resistance.
+
+Once local transients have settled, the useful relation is
+`T_CPU - T_water ≈ P_CPU * R_CPU_water`, with resistance in K/W. Illustratively,
+100 W and0.25–0.30 K/W give25–30 C. That is physically plausible, not a
+calibrated value for this CPU. A material layer contributes roughly L/(k*A),
+and a convection boundary1/(h*A); heat spreading and the different die,
+heat-spreader, block and wetted areas matter. Package watts and a hotspot
+sensor are not necessarily represented by one invariant resistance across
+different workloads. Idle CPU temperature is not water temperature either.
+
+In the idealized near-steady model, CPU headroom is consumed by three terms:
+`T_CPU ≈ T_inlet_air + Q_loop/H_radiator + P_CPU*R_CPU_water`.
+Increasing the shared loop temperature shifts the CPU baseline up before a
+burst adds its local rise. The native90 C guard remains in place for the
+current experiment; no additional CPU burst was launched.
+
+## Water inventory constraint and direct-to-air heat
+
+User estimates less than 3 litres of coolant. Using water density about
+1 kg/litre and specific heat about 4180 J/(kg K), water heat capacity is
+less than roughly 12,540 J/K. This is not a bound on the entire loop's
+effective capacity: radiator, blocks, tubing and other participating masses
+also store heat. Coolant composition and temperature affect the estimate.
+
+For exactly 3 litres, hypothetical 500 W deposited into coolant would give
+2.39 C/min with zero rejection, or 1.20 C/min if 250 W is already rejected.
+Those slopes are not upper bounds for all volumes below 3 litres; smaller
+water volume heats faster at equal net power. The 500 W is an illustration,
+not a measurement of heat entering the liquid or a sum of uncertain board
+and chip-rail electrical readings.
+
+If actual coolant warming were 0.02 C/min, less than 3 litres would store
+less than about 4.2 W in the water itself. This would imply near balance
+between inflow and radiator rejection ONLY if storage elsewhere were small
+and heat inflow were known. CPU temperature slope is not a water-temperature
+measurement. Small water volume alone cannot exclude an hour-long tail:
+for the single lump with constant air, tau=C_effective/UA and net heating
+approaches zero near equilibrium. Room heating and recirculation remain
+plausible, not identified from the available sensors.
+
+"At least 50% dumped into the radiator" must distinguish two fractions:
+electrical heat captured by the liquid versus already-rejected heat divided
+by liquid heat input. Neither fraction is measured here. The room-state RC
+solver now accepts optional `room_heat_w`, an additional source bypassing
+the liquid path. If P is a valid heat input, partition it as f*P through the
+modeled coolant path and (1-f)*P directly to room air; do not count P twice.
+This is a lumped heat-allocation approximation, not a model of device-to-air
+resistance or local exhaust recirculation. The room equation becomes:
+
+```
+C_room dA/dt = H (W-A) + Q_direct_air - H_room (A-A_out)
+```
+
+At steady state all heat still reaches the room: changing the coolant
+capture fraction changes coolant-to-room delta-T, but not total room heat
+when total heat input is held fixed. Tests verify both heat routes and reject
+unusable room-heat inputs. No experimental load or cooling setting changed.
+
 ## First provisional plateau window
 
 Supervisor journal at 2026-09-10 16:44:53 host time logged the first observed

@@ -1,0 +1,49 @@
+{
+  "run_id": "2ba8b0226ea4",
+  "run_started_at_unix": 1789056806.2019544,
+  "forecast_issued_at_utc": "2026-09-10T17:51:42Z",
+  "purpose": "Frozen descriptive model comparison; not physical parameter identification or a temperature safety limit",
+  "sensor": "CPU Tctl, median of five-minute windows",
+  "time_unit": "minutes since run start",
+  "training_midpoint_max_min": 62.5,
+  "observed_points_were_already_inspected": true,
+  "power_is_a_model_input": false,
+  "points": [
+    [7.5, 73.75], [12.5, 76.625], [17.5, 78.0], [22.5, 78.875],
+    [27.5, 79.375], [32.5, 79.625], [37.5, 80.0], [42.5, 80.25],
+    [47.5, 80.375], [52.5, 80.5], [57.5, 80.625], [62.5, 80.875],
+    [67.5, 81.0], [72.5, 81.125], [77.5, 81.25], [82.5, 81.375],
+    [87.5, 81.5]
+  ],
+  "one_exponential": {
+    "equation": "floor_c - sum(amplitude_c[i]*exp(-t/tau_min[i]))",
+    "tau_min": [11.094628943275218],
+    "floor_c": 80.60149690082116,
+    "amplitude_c": [13.14222322387262],
+    "retrospective_holdout_rmse_c": 0.6842530605493095
+  },
+  "two_exponentials": {
+    "equation": "floor_c - sum(amplitude_c[i]*exp(-t/tau_min[i]))",
+    "tau_min": [6.245883541064722, 46.52239734665354],
+    "floor_c": 81.96736573368547,
+    "amplitude_c": [14.848449996210686, 4.398582954785193],
+    "retrospective_holdout_rmse_c": 0.13359394899309177,
+    "prospective_predictions_c": {"120": 81.6338683045772, "180": 81.87553623557858, "240": 81.94208020616317}
+  },
+  "exponential_plus_ramp": {
+    "equation": "offset_c - amplitude_c*exp(-t/tau_min) + slope_c_per_min*t",
+    "tau_min": 7.2461654996616325,
+    "offset_c": 78.8066828141524,
+    "amplitude_c": 14.886121535827893,
+    "slope_c_per_min": 0.032859310370157054,
+    "retrospective_holdout_rmse_c": 0.11702717417529587,
+    "prospective_predictions_c": {"120": 82.74979910213679, "180": 84.72135868053823, "240": 86.69291730299003}
+  },
+  "validation_rules": [
+    "Use CPU medians over windows centered on forecast times, e.g. 117.5 through122.5 minutes for the120-minute prediction.",
+    "Only assess heating forecasts while the original run and comparable power continue; a temperature cutoff or workload/cooling intervention invalidates the continuation assumption.",
+    "Record errors against these frozen parameters before any refit.",
+    "Neither a good fit nor a slow pole alone locates the thermal state in room air, coolant or hardware.",
+    "The last input median was from an almost-complete five-minute window (291 samples) when queried."
+  ]
+}
