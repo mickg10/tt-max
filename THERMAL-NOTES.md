@@ -1,5 +1,118 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Passive cooldown assessment (18:36 UTC; no load restarted)
+
+The user-ended run remains cancelled. The TT worker reported its final
+`done` event and exit code 0; the soak supervisor is inactive. The recorder
+continues at approximately 1 Hz with no recording error. At 18:34:32 UTC,
+27.6 minutes after stopping, CPU Tctl was 55.875 C and TT temperatures were
+41.0/42.3/40.8/42.8 C. CPU frequency maximums have already been restored;
+no additional frequency changes, device resets or workloads were performed.
+
+The first 25 minutes of cooldown and the original idle reference were
+queried read-only from NAS ClickHouse, avoiding analysis work on q4. Frozen
+aggregates, 210 ten-second bins, the exact query, fitting conventions and
+results are in `thermal-analysis/20260910-q4-cooldown.json`. Temperatures
+below are window medians; power is the arithmetic mean.
+
+| Window | CPU C | TT0 / TT1 / TT2 / TT3 C | CPU package W | Summed TT rails W |
+| --- | ---: | --- | ---: | ---: |
+| Original 74-second idle reference | 54.25 | 39.4 / 40.4 / 39.1 / 40.5 | 18.83 | 60.77 |
+| Last loaded minute, excluding final 5 s | 82.125 | 83.3 / 86.2 / 83.5 / 85.7 | 20.79 | 445.27 |
+| 5–8 min after stop | 64.125 | 50.1 / 51.9 / 49.9 / 51.85 | 18.81 | 105.91 |
+| 10–15 min after stop | 59.25 | 44.5 / 46.6 / 44.3 / 46.3 | 18.69 | 96.41 |
+| 15–20 min after stop | 57.375 | 42.5 / 44.3 / 42.5 / 44.4 | 18.81 | 86.36 |
+| 20–25 min after stop | 56.375 | 41.6 / 43.15 / 41.3 / 43.2 | 19.02 | 93.10 |
+
+**The idle reference is not power-matched.** All four original idle clock
+medians were 800 MHz. Following this run, TT1 and TT3 report 1350 MHz while
+TT0 and TT2 report 800 MHz, despite the benchmark worker having exited.
+The 20–25-minute mean TT powers are 21.99/27.01/14.10/30.00 W, versus
+15.16/17.00/13.35/15.26 W originally. Clock telemetry alone does not prove
+useful compute activity. These power and clock differences, residual
+cooling, and unmeasured ambient prevent assigning the entire remaining
+temperature excess to room heating. No clock reset was attempted.
+
+The final loaded CPU was roughly 28 C above the original idle reference,
+with package power differing by only about 2 W. By 20–25 minutes off, the
+CPU excess was about 2.1 C. Together with the repeated local TT drop followed
+by common cooling, this strongly supports a hot shared cooling environment
+during the run. It does not establish an absolute coolant temperature or
+partition the final heating tail into loop, room, or exhaust recirculation.
+
+### One-pole cooldown fits fail the later cooling tail
+
+A common exponential fitted to all five temperature channels during
+30–300 s gives tau 222.94 s. Extending its frozen parameters over 300–1500 s
+has per-channel RMSE 3.41/3.17/2.93/3.10/2.83 C. Its extrapolated CPU floor
+61.04 C is plainly above the later observed CPU temperature. This is a
+descriptive short-window decay, not a validated whole-loop time constant.
+All these windows had already been observed; these are retrospective checks,
+not prospective validation.
+
+Power-aware one-pole CPU fits trained on the final 600 s loaded plus the
+first 300 s off also fail the later 300–1500 s. Ten-second mean electrical
+power and median temperature are used, excluding source samples with CPU
+package power >=23 W or stale TT readings. Depending on whether the input
+is summed chip rails or same-board min/max/mean INPUT_POWER, fitted taus
+are 344–428 s; training RMSE is 0.41–0.42 C, later RMSE 2.05–4.79 C.
+The ratio tau/gain spans 4.2–11.4 kJ/K and must NOT be called the physical
+heat capacity: neither proxy is calibrated heat deposited into water, the
+model fails its later interval, and inlet air is unmeasured.
+
+For another consistency check, CPU cooling during 30–90 s is -5.071 C/min.
+If every litre of the estimated 3–4 L followed that slope, water alone would
+release 1.06–1.41 kW. The loaded-to-off chip-rail-plus-package power change
+is about 309 W; the analogous mean-of-duplicate board proxy change is
+about 699 W. Thus the joint assumptions of uniform water temperature,
+calibrated heat input, unchanged inlet air and CPU exactly tracking water
+are not established. The mismatch does not prove that the user's water
+inventory is wrong. Local cooling paths and observation lag also matter.
+
+### Relative thermal drops are better identified than absolute water
+
+Near local equilibrium, `CPU - mean(TT)` approximately equals sensor-offset
+difference plus `R_CPU*P_CPU - mean(R_TT*P_TT)`, with additional terms for
+different local water temperatures. A uniform common water state cancels.
+Repeated on/off changes give an apparent TT relative path around 0.18 K/W
+under the common-water and constant-resistance assumptions. That is more
+defensible than treating unloaded chips as exact water thermometers.
+
+Illustratively, subtracting 0.15–0.20 K/W times approximately 111 W per chip
+from roughly 84.7 C gives a loaded water estimate around 62–68 C. This is
+an assumption-dependent sensitivity calculation, NOT a measured range or
+confidence interval. Unknown sensor offsets and heat paths can shift it.
+Consequently, the 90 C die guards must not be presented as protecting a
+60 C coolant specification. A direct suitable coolant sensor and radiator
+inlet-air measurement remain the discriminating measurements.
+
+### Manufacturer specifications revise the mass sensitivity case
+
+The canonical [TT-QuietBox 2 Blackhole specifications](https://docs.tenstorrent.com/systems/quietbox/quietbox-bh-2/specifications.html)
+match q4's Ryzen 9700X, B850M-C and two p300c cards, and list **20 kg / 44 lb**
+system weight, rather than the user's approximate 30 lb. Treat this as a
+separate stock-system scenario, not a weighing of this individual machine.
+With the user's 3–4 L water estimate and the same 0.4–0.9 kJ/(kg K) dry
+material assumptions, the 20 kg case is approximately 19–31 kJ/K. At the
+late 0.0278 C/min slope it stores roughly 9–14 W if all that mass follows
+the common temperature. This does not reverse the near-heat-balance
+conclusion and does not make all case mass part of the liquid loop.
+
+The same canonical page lists up to 1100 W combined board power and 1300 W
+system maximum. Those are product ratings, not measurements of this run;
+do not replace the measured chip-rail domain with them. They also differ
+from the newer illustrated guide's approximately 1500 W claim. Neither
+document calibrates discrepant INPUT_POWER readings or the liquid/air split.
+The [manufacturer FAQ](https://docs.tenstorrent.com/systems/quietbox/quietbox-bh-2/support-bh-2.html)
+describes bottom/side intake, top exhaust and 25 cm clearance for airflow.
+It does not specifically demand 25 cm under the factory feet. No physical
+cooling or placement changes were made during this cooldown.
+
+Current conclusion: substantial shared-sink heat soak is strongly supported;
+exact coolant temperature and the room contribution are not identified.
+The model goal remains in progress pending a measured boundary/coolant
+reference; the experiment remains stopped and passive recording continues.
+
 ## User-ended soak and recorded shutdown transition (18:06:53 UTC)
 
 User requested ending the soak. Stopped only q4 run `2ba8b0226ea4` through
