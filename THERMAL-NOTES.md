@@ -1,5 +1,28 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## 25-minute checkpoint: strong cross-heating, not absolute coolant thermometry
+
+Run2ba8b0226ea4 remains live under the original supervisor (observed1541s).
+SQLite online-backup artifact `/tmp/tt-soak-25min.sqlite3` on nas642 and q4.
+Compare seconds20–30 (host-cooldown before sustained replay, 10 samples)
+with seconds1200–1500 (300 samples): CPU median57.375→78.875 C, package
+power19.56→20.77 W. TT chip medians46.8/49.4/46.7/49.7→
+79.15/82.4/79.6/81.8 C. TT summed-rail power155→439 W; early active
+seconds60–180 median487.5 W. Initial stored heat from preceding tests remains
+present, and the short pre-replay interval is not an equilibrium reference.
+The21.5 C CPU rise at only1.2 W higher package power supports a substantial
+shared thermal contribution, not an exclusively CPU-workload explanation.
+Different hotspot placement and unmeasured air drift still limit attribution.
+
+SYSTIN34→39 C; CPUTIN42→59 C (neither verified as air/coolant). Fan4/5
+median1148/1145→1158/1156 RPM; inferred pump fan6 4804→4770 RPM.
+PWM4/5/6 stayed255. No cooling-setting intervention occurred. Do not call
+the5 C SYSTIN change a measured room-temperature change.
+
+At25min recent5min slopes were CPU .117 and TT .175/.041/.129/.120 C/min.
+Full plateau criterion not met. The original eight-hour run remains required;
+do not mark complete from this checkpoint or restart it.
+
 ## Live measured-power fit, run 2ba8b0226ea4
 
 Read-only snapshot `/tmp/tt-soak-live.sqlite3` on nas642/q4 captures the
