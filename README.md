@@ -37,11 +37,30 @@ uv run tt-max --tt-python /path/to/tt-venv/bin/python run --duration 60
 
 That interpreter needs compatible `torch` and `ttnn`; `tt-smi` must be on PATH and the user must be allowed to open `/dev/tenstorrent/*`. TT-NN compiles kernels on first use. TT tensors are prepared and verified before CPU/memory stress starts, keeping initialization from competing with full CPU load. The timeout includes initialization and compilation; use 120 seconds for a cold cache if workers cannot finish a verified iteration within 60 seconds. The app refuses TT runs if TT-SMI reports existing device users. This preflight is advisory: coordinate with other users, because unrelated software can open devices after the check.
 
+### Disconnected n300 boards (quietbox2/3)
+
+Four disconnected n300 boards contain eight chips, but cannot form one eight-chip mesh. TT Max groups TT-SMI rows by their shared **board serial**, resolves the host chip's PCI address through `/sys/class/tenstorrent/tenstorrent!N/device`, and uses the corresponding `/dev/tenstorrent/N` ID. It launches one worker per selected board concurrently. Each gets `TT_VISIBLE_DEVICES=N`, a separate `TT_METAL_CACHE`, and a native two-chip mesh with runtime-local IDs `0,1`. Both device outputs must pass the initial Torch-reference check before that worker is ready; CPU/memory stress waits until every selected board is ready.
+
+`--tt-devices` and the dashboard use **global TT-SMI chip IDs**, not PCIe node IDs. A subset must include both chips sharing a board serial. A partial pair is rejected with the required IDs; it never silently expands your selection. `all` and the maximum-power preset select all four boards/eight chips. Quietbox4's Blackhole behavior remains one native mesh across its four chips.
+
+For example, this observed quietbox3 enumeration has shuffled remote-chip and driver-node ordering:
+
+| TT-SMI chip pair | Host PCI address | Worker visibility | Worker-local chips |
+| --- | --- | --- | --- |
+| `0,5` | `0000:01:00.0` | `/dev/tenstorrent/1` | `0,1` |
+| `1,6` | `0000:41:00.0` | `/dev/tenstorrent/2` | `0,1` |
+| `2,4` | `0000:42:00.0` | `/dev/tenstorrent/3` | `0,1` |
+| `3,7` | `0000:c1:00.0` | `/dev/tenstorrent/0` | `0,1` |
+
+Thus `uv run tt-max run --tt-devices 0,5 --cpu-workers 0 --memory-gb 0` selects one board in that enumeration. IDs can change after a reboot; the app reads the current SMI/serial/sysfs mapping each run. Board serials appear in the device table; PCI addresses are available on hover. Missing or ambiguous mappings stop preflight before workers launch. Each report includes `tt_plan` and separate global `devices` / `runtime_devices` fields, so per-board progress cannot be mistaken for a different global chip.
+
+See Tenstorrent's [device-visibility and concurrent-process guidance](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/Programming_Mesh_of_Devices/Programming_Mesh_of_Devices_with_TT-NN.md#23-controlling-device-visibility). Hardware acceptance of this n300 path is separate from the existing quietbox4 validation; see [VALIDATION.md](VALIDATION.md).
+
 ## What runs and what is measured
 
 - **CPU:** one process per selected logical CPU, repeated single-threaded float32 BLAS matrix multiplication. BLAS threads are constrained to avoid accidental multiplication of parallelism.
 - **Memory:** a separate process repeatedly writes the requested resident float64 array. This is a streaming workload, not a memory-integrity certification.
-- **TT:** one process owns all selected chips (avoiding cross-process runtime discovery locks), tiled bfloat16 matrices, repeated `ttnn.matmul` into reused outputs. Each batch submits eight multiplies per chip before synchronizing all devices. The initial result on every chip is checked against a Torch reference before the worker becomes ready. TFLOPS is aggregate mathematical operations divided by host wall time, including dispatch/synchronization; it is not a vendor peak rating.
+- **TT:** one native mesh on Blackhole, or one isolated two-chip mesh worker per n300 board. Each uses tiled bfloat16 matrices and repeated `ttnn.matmul` into reused outputs. Each batch submits eight multiplies per chip before synchronizing its mesh. The initial result on every chip is checked against a Torch reference before its worker becomes ready. TFLOPS is per-worker aggregate mathematical operations divided by host wall time, including dispatch/synchronization; it is not a vendor peak rating.
 - **Telemetry:** CPU utilization, available/used RAM, CPU temperature where supported, per-chip power, temperature and clock, and board input power from TT-SMI. A p300c reports board power on both chips; the total counts each board once. Firmware power values can contain transient spikes and are not calibrated wall-power measurements.
 - **Utilization:** TT-SMI 6.5.0 on Blackhole does **not** expose a true compute-utilization percentage. Hardware utilization is shown as unavailable. The separate worker kernel-duty percentage measures host time spent issuing/waiting for operations and must not be interpreted as Tensix occupancy.
 

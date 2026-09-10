@@ -18,6 +18,8 @@ import uuid
 
 import psutil
 
+from .topology import plan_tt_workers
+
 GIB = 1024 ** 3
 WORKER = Path(__file__).with_name("worker.py")
 
@@ -194,23 +196,34 @@ class Engine:
                 values = json.loads(line)
                 if isinstance(values, dict) and "event" in values:
                     with self.lock:
+                        if "devices" in values:
+                            values["runtime_devices"] = values.pop("devices")
+                        if "verified_device" in values:
+                            values["runtime_verified_device"] = values.pop("verified_device")
                         worker.update(values)
                     continue
             except ValueError:
                 pass
             self._log(f"{worker['name']}: {line}")
 
-    def _spawn(self, kind, deadline, **options):
+    def _spawn(self, kind, deadline, *, visible_device=None, selected_devices=None, board_id=None, **options):
         interpreter = self.tt_python if kind == "tt" else sys.executable
         cmd = [interpreter, "-u", str(WORKER), kind, "--deadline", str(deadline)]
         for key, value in options.items():
-            cmd += [f"--{key}", str(value)]
+            cmd += [f"--{key.replace('_', '-')}", str(value)]
         env = dict(os.environ, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                    TT_METAL_LOGGER_LEVEL="ERROR")
+        if visible_device is not None:
+            env["TT_VISIBLE_DEVICES"] = str(visible_device)
+            # Separate caches are required for concurrently compiling board workers.
+            cache = Path.home() / ".cache" / "tt-max" / "metal" / f"pcie-{visible_device}"
+            cache.mkdir(parents=True, exist_ok=True)
+            env["TT_METAL_CACHE"] = str(cache)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, start_new_session=True, env=env)
-        worker = {"name": f"{kind}-{options.get('devices', len(self.processes))}", "kind": kind,
-                  "pid": proc.pid, "event": "initializing", "devices": options.get("devices")}
+        name = f"tt-board-{visible_device}" if visible_device is not None else f"{kind}-{options.get('devices', len(self.processes))}"
+        worker = {"name": name, "kind": kind, "pid": proc.pid, "event": "initializing",
+                  "devices": selected_devices, "board_id": board_id, "visible_device": visible_device}
         with self.lock:
             self.processes.append(proc)
             self.run["workers"].append(worker)
@@ -238,6 +251,7 @@ class Engine:
             except BlockingIOError:
                 raise RuntimeError("Another TT Max controller on this host is running a benchmark") from None
             ids = []
+            plans = []
             if cfg["tt"]:
                 if not Path(self.tt_python).is_file() and not shutil.which(self.tt_python):
                     raise RuntimeError(f"TT Python not found: {self.tt_python}; set --tt-python")
@@ -247,12 +261,11 @@ class Engine:
                 busy = [p for p in preflight["processes"] if "tt-smi" not in p.get("cmdline", "")]
                 if busy:
                     raise RuntimeError(f"TT devices are already in use by PIDs: {[p['pid'] for p in busy]}")
-                ids = [d["id"] for d in preflight["devices"]] if cfg["tt_devices"] == "all" else [int(i) for i in cfg["tt_devices"].split(",")]
-                available_ids = {d["id"] for d in preflight["devices"]}
-                if not ids or not set(ids) <= available_ids:
-                    raise RuntimeError(f"Requested TT devices unavailable; found {sorted(available_ids)}")
+                plans = plan_tt_workers(preflight["devices"], cfg["tt_devices"])
+                ids = [i for plan in plans for i in plan["selected_devices"]]
                 with self.lock:
                     self.telemetry["tt"] = preflight
+                    self.run["tt_plan"] = plans
             # Timeout covers worker startup/compilation, load, and normal run time.
             deadline = time.monotonic() + max(0, cfg["duration"] - (time.time() - self.run["started_at"]))
             if self.stop_event.is_set():
@@ -263,12 +276,20 @@ class Engine:
             with self.lock:
                 self.run["state"] = "running"
             if ids:
-                self._spawn("tt", deadline, devices=",".join(str(i) for i in ids), size=cfg["matrix_size"])
+                for plan in plans:
+                    if self.stop_event.is_set() or time.monotonic() >= deadline:
+                        break
+                    kwargs = {"expected_devices": 2} if plan["visible_device"] is not None else {}
+                    self._spawn("tt", deadline, devices=",".join(map(str, plan["devices"])),
+                                size=cfg["matrix_size"], visible_device=plan["visible_device"],
+                                selected_devices=plan["selected_devices"], board_id=plan["board_id"], **kwargs)
+                    if plan["visible_device"] is not None:
+                        self._log(f"n300 board {plan['board_id']} at {plan['bus_id']}: /dev/tenstorrent/{plan['visible_device']} → SMI chips {plan['selected_devices']}, runtime-local chips [0, 1]")
                 self._log("Preparing and verifying TT tensors before starting CPU/memory load")
                 while time.monotonic() < deadline and not self.stop_event.wait(.1):
                     self._check_health(cfg, ids)
                     with self.lock:
-                        if self.run["workers"][0].get("verified"):
+                        if len(self.run["workers"]) == len(plans) and all(w.get("verified") for w in self.run["workers"]):
                             break
                 if not self.stop_event.is_set() and time.monotonic() >= deadline:
                     raise RuntimeError("Time budget expired preparing TT; CPU/memory load was not started")

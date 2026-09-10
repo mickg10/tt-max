@@ -94,7 +94,7 @@ def main():
     run.add_argument("--cpu-workers", type=int, default=os.cpu_count() or 1)
     run.add_argument("--memory-gb", type=float, default=1)
     run.add_argument("--no-tt", action="store_true")
-    run.add_argument("--tt-devices", default="all")
+    run.add_argument("--tt-devices", default="all", help="Global TT-SMI chip IDs; n300 subsets must include both chips of each selected board")
     run.add_argument("--matrix-size", type=int, default=2048)
     run.add_argument("--mode", choices=["balanced", "power"], default="balanced")
     run.add_argument("--temperature-limit", type=int, default=85)

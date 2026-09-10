@@ -14,3 +14,9 @@ All stress runs stopped at their configured deadlines. No TT Max workers or dash
 Reports are in `results/quietbox4-mesh.json`, `results/quietbox4-power.json` and `results/quietbox4-gui-power.json` in the deployed checkout and the local checkout. These generated files are intentionally ignored by Git.
 
 TT-SMI 6.5.0 on this p300c host exposes power, temperature and clocks but no real compute-utilization percentage. Missing utilization remains unavailable, and p300c board power is counted once per board. Firmware power readings showed large transient spikes, including values above configured board limits; the UI exposes the reported data, but these measurements are **not calibrated wall-power readings**. Temperature and mathematical throughput figures above are separate measurements.
+
+## n300 board isolation update
+
+The n300 implementation was developed against the observed quietbox3 SMI board serials, non-adjacent chip pairs and sysfs PCI-to-device-node mapping supplied during host maintenance. No host was contacted, deployed to or stress-tested for this code-only update.
+
+`uv run pytest -q`: **36 passed** locally. New checks cover all four board owners, complete-board subsets, shuffled global chip and PCI node numbering, missing/ambiguous serial/PCI mappings, overlapping nodes, and unchanged Blackhole mesh planning. A subprocess integration test launches four independent probe workers, verifies distinct visibility/cache environments and local `0,1` IDs, waits for all four before starting CPU load, and confirms cleanup if one board worker fails. These probes do not emulate TT compute or claim eight-chip hardware validation; that acceptance remains for the host-maintenance owner.

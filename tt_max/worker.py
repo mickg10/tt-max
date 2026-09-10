@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--deadline", type=float, required=True)
     parser.add_argument("--size", type=int, default=2048)
     parser.add_argument("--devices", default="0")
+    parser.add_argument("--expected-devices", type=int)
     parser.add_argument("--bytes", type=int, default=0)
     args = parser.parse_args()
     signal.signal(signal.SIGTERM, stop)
@@ -41,6 +42,10 @@ def main():
             import ttnn
             torch.set_num_threads(1)
             ids = [int(i) for i in args.devices.split(",")]
+            if args.expected_devices is not None:
+                count = ttnn.get_num_devices()
+                if count != args.expected_devices:
+                    raise RuntimeError(f"Expected {args.expected_devices} visible chips, found {count}; refusing incorrect device isolation")
             # One mesh owns every selected chip. Opening individual mesh-backed
             # devices concurrently can serialize discovery in modern TT-NN.
             mesh = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape(1, len(ids)), physical_device_ids=ids)
