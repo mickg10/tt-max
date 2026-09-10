@@ -9,7 +9,7 @@ from pathlib import Path
 import signal
 import sys
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from .engine import Engine
 
@@ -55,6 +55,12 @@ def handler(engine, token):
                 self.send(200, engine.info())
             elif self.path == "/api/report":
                 self.send(200, engine.report())
+            elif urlparse(self.path).path == '/api/history':
+                try:
+                    query = parse_qs(urlparse(self.path).query)
+                    self.send(200, engine.recorder.history(query.get('after', ['0'])[0], query.get('limit', ['1000'])[0]))
+                except (ValueError, OverflowError) as exc:
+                    self.send(400, {'error': str(exc)})
             else:
                 self.send(404, {"error": "Not found"})
 

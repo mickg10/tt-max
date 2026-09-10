@@ -109,6 +109,18 @@ Memory validation reserves at least 10% of total RAM or 2 GiB, including estimat
 
 ## Reports and development
 
+### Continuous thermal database
+
+The dashboard records continuously at a target of one row per second, including idle/cooldown periods. SQLite uses WAL and persists across service restarts. Default: `~/.local/share/tt-max/telemetry.sqlite3`; override with `TT_MAX_DB`. Compose stores it in the `telemetry` volume. Run-report downsampling does not affect this database.
+
+Rows contain UTC Unix timestamps, benchmark ID/state/config, CPU temperature/utilization, TT temperatures and chip/board power, CPU-minus-each-TT temperature deltas, raw motherboard fan RPM/PWM/temperature channels, and available RAPL energy/power domains. CPU package and its child core domain must not be summed. Unreadable counters remain null with an error; no watts are inferred from utilization. Sensor labels are preserved: motherboard temperatures are not labeled coolant or ambient without physical verification.
+
+TT-SMI is polled independently at a one-second target; if a call is slower, records retain the last sample with its original `sampled_at` and `tt_age_seconds`. Thus one database row per second does not falsely imply every hardware sensor supplied a fresh reading. Recorder failures appear as `recording_error` in live telemetry. No automatic deletion/retention policy is applied; monitor disk space and archive as needed.
+
+Scrape `GET /api/history?after=0&limit=1000`, using the returned `next_after` as the next cursor (limit 1–3600). Existing token/origin protections apply. Each row has a monotonic database `sample_id` independent of wall-clock adjustments. Direct SQL: `SELECT id,timestamp,run_id,payload FROM samples ORDER BY id;`. Use SQLite's online backup API or `.backup` while the service runs; copying only the main file can omit WAL data.
+
+On native Linux services, root can install `power-counter-access.py` and run it before service start with the dedicated service group as its argument. This changes only group ownership/read permission of RAPL `energy_uj` files, not power limits. Sysfs permissions may reset at reboot/device re-creation. Do not make counters world-readable or run the entire dashboard as root solely for this access.
+
 `--output results/run.json` saves configuration, per-worker iterations/rates/exit status, logs and sampled telemetry. The dashboard exposes the most recent full report at authenticated `GET /api/report`; `GET /api/status` returns the compact live view. `POST /api/start` accepts the CLI-equivalent JSON config; `POST /api/stop` accepts `{}`. Both require `Content-Type: application/json`.
 
 ```bash

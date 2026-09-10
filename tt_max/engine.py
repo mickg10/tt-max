@@ -10,6 +10,7 @@ import shutil
 import signal
 import socket
 import stat
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -17,6 +18,7 @@ import time
 import uuid
 
 import psutil
+from .recording import Recorder, HostSensors, temperature_deltas
 
 from .topology import plan_tt_workers
 
@@ -37,6 +39,7 @@ def tt_snapshot():
     if not command:
         return {"devices": [], "processes": [], "error": "tt-smi is not installed"}
     try:
+        poll_started_at = time.time()
         result = subprocess.run([command, "-s", "--snapshot_no_tty", "--offline"],
                                 capture_output=True, text=True, timeout=8, check=True)
         raw = json.loads(result.stdout[result.stdout.index("{"):])
@@ -58,7 +61,8 @@ def tt_snapshot():
         boards = {d["board_id"] or d["bus_id"]: d["board_power_w"] for d in devices}
         return {"devices": devices, "processes": raw.get("processes", []), "error": None,
                 "board_power_w": sum(v for v in boards.values() if v is not None) if any(v is not None for v in boards.values()) else None,
-                "sampled_at": time.time()}
+                "sampled_at": time.time(), "poll_started_at": poll_started_at,
+                "source_timestamp": raw.get('time')}
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         return {"devices": [], "processes": [], "error": str(exc)}
 
@@ -126,6 +130,10 @@ class Engine:
         self.readers = []
         self.telemetry = {"cpu_percent": 0, "memory": {}, "tt": {"devices": [], "error": "Sampling…"}}
         self.thread = None
+        self.recorder = Recorder(os.environ.get('TT_MAX_DB', str(Path.home() / '.local/share/tt-max/telemetry.sqlite3')))
+        self.host_sensors = HostSensors()
+        self.tt_monitor = threading.Thread(target=self._monitor_tt, daemon=True)
+        self.tt_monitor.start()
         self.monitor = threading.Thread(target=self._monitor, daemon=True)
         self.monitor.start()
 
@@ -133,12 +141,20 @@ class Engine:
         return {"hostname": socket.gethostname(), "cpu_count": os.cpu_count() or 1,
                 "memory_total_gb": round(psutil.virtual_memory().total / GIB, 1),
                 "tt_available": bool(list(Path("/dev/tenstorrent").glob("[0-9]*"))),
-                "tt_python": self.tt_python}
+                "tt_python": self.tt_python, "telemetry_database": str(self.recorder.path)}
+
+    def _monitor_tt(self):
+        while not self.shutdown.is_set():
+            started = time.monotonic()
+            sample = tt_snapshot()
+            with self.lock:
+                self.telemetry['tt'] = sample
+            self.shutdown.wait(max(0.01, 1 - (time.monotonic() - started)))
 
     def _monitor(self):
         psutil.cpu_percent()
-        next_tt = 0
         while not self.shutdown.is_set():
+            started = time.monotonic()
             mem = psutil.virtual_memory()
             values = {"cpu_percent": psutil.cpu_percent(),
                       "memory": {"total": mem.total, "used": mem.used, "available": mem.available, "percent": mem.percent},
@@ -150,17 +166,27 @@ class Engine:
                 values["cpu_temperature_c"] = max(cpu_temps) if cpu_temps else None
             except (AttributeError, OSError):
                 values["cpu_temperature_c"] = None
-            if time.monotonic() >= next_tt:
-                values["tt"] = tt_snapshot()
-                next_tt = time.monotonic() + 2
+            values['host_sensors'] = self.host_sensors.sample(started)
             with self.lock:
                 self.telemetry.update(values)
+                self.telemetry['cpu_minus_tt_c'] = temperature_deltas(values['cpu_temperature_c'], self.telemetry['tt'])
+                sampled_at = self.telemetry['tt'].get('sampled_at')
+                self.telemetry['tt_age_seconds'] = max(0, time.time() - sampled_at) if sampled_at else None
+                persisted = copy.deepcopy(self.telemetry)
+                run = {k: self.run.get(k) for k in ('id', 'state', 'config', 'started_at', 'finished_at', 'error')} if self.run else None
                 if self.run and self.run["state"] == "running":
                     samples = self.run["samples"]
                     interval = max(1, self.run["duration"] / 3600)
                     if not samples or values["timestamp"] - samples[-1]["timestamp"] >= interval:
                         samples.append(copy.deepcopy(self.telemetry))
-            self.shutdown.wait(1)
+            try:
+                self.recorder.record(persisted, run)
+                with self.lock:
+                    self.telemetry['recording_error'] = None
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                with self.lock:
+                    self.telemetry['recording_error'] = str(exc)
+            self.shutdown.wait(max(0.01, 1 - (time.monotonic() - started)))
 
     def snapshot(self):
         with self.lock:
