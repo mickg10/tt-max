@@ -131,3 +131,18 @@ uv run pytest -q
 Tests exercise real CPU/memory timeout and cancellation, memory/config limits, board-power deduplication, HTTP token authentication and cross-origin protection. See [VALIDATION.md](VALIDATION.md) for hardware verification.
 
 Runtime references: [TT-NN API](https://docs.tenstorrent.com/tt-metal/latest/ttnn/) and [official TT-SMI telemetry fields](https://github.com/tenstorrent/tt-smi/blob/main/README.md).
+# Low-host-overhead TT thermal tests
+
+The start API accepts `"tt_trace": true` (opt-in; default false). Use it with
+`"mode":"balanced", "cpu_workers":0, "memory_gb":0, "tt":true`.
+Power mode enables CPU workers and is **not** a TT-only thermal test.
+Trace mode warms the reusable-output program, captures 256 matmuls, verifies
+replay numerically, waits 20 seconds for host setup cooldown, and replays with
+host sleeps before synchronization. The total timeout includes all setup.
+Reported TFLOP/s counts completed replay work; trace-mode hardware utilization
+is not inferred from wall time. Measure actual CPU package power throughout.
+
+On quietbox4 a temporary 1.5 GHz CPU frequency cap was additionally needed
+to prevent startup boost spikes. This cap is **not automatically applied**
+by the app. Pilot orchestration restored all original CPU limits on exit.
+Trace mode is hardware-tested on quietbox4 only; q2/3 are not yet validated.

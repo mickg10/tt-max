@@ -70,7 +70,7 @@ def tt_snapshot():
 def normalize_config(raw):
     cfg = {"duration": 60, "cpu_workers": os.cpu_count() or 1, "memory_gb": 1,
            "tt": True, "tt_devices": "all", "matrix_size": 2048,
-           "mode": "balanced", "temperature_limit": 85}
+           "mode": "balanced", "temperature_limit": 85, "tt_trace": False}
     unknown = set(raw) - set(cfg)
     if unknown:
         raise ValueError(f"Unknown options: {', '.join(sorted(unknown))}")
@@ -85,6 +85,8 @@ def normalize_config(raw):
         raise ValueError("matrix_size must be a multiple of 32")
     if not isinstance(cfg["tt"], bool):
         raise ValueError("tt must be true or false")
+    if not isinstance(cfg["tt_trace"], bool):
+        raise ValueError("tt_trace must be true or false")
     if cfg["mode"] not in ("balanced", "power"):
         raise ValueError("mode must be balanced or power")
     memory = cfg["memory_gb"]
@@ -309,6 +311,8 @@ class Engine:
                     if self.stop_event.is_set() or time.monotonic() >= deadline:
                         break
                     kwargs = {"expected_devices": 2} if plan["visible_device"] is not None else {}
+                    if cfg["tt_trace"]:
+                        kwargs["trace_matmuls"] = 256
                     self._spawn("tt", deadline, devices=",".join(map(str, plan["devices"])),
                                 size=cfg["matrix_size"], visible_device=plan["visible_device"],
                                 selected_devices=plan["selected_devices"], board_id=plan["board_id"], **kwargs)

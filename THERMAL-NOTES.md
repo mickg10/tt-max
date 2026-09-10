@@ -1,5 +1,59 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## TT trace replay and shared heat experiment
+
+Opt-in API `tt_trace: true` now captures 256 reusable-output matmuls and
+replays with the CPU sleeping before synchronization. Setup requires warm-up
+with the same output-buffer signature; initial failed capture was stopped,
+not counted as valid compute. Numerical output checks cover all four chips.
+Two CPU-limit pilot scripts live at `/tmp/tt-trace-pilot.py` and
+`/tmp/tt-capped-trace-pilot.py` on nas642/q4. They temporarily set all q4 CPU
+maximum frequencies to 1.5 GHz, run with CPU/memory workers off, and restore
+the original 5582301 kHz maximums in a finally block. No permanent CPU cap.
+No q2/3 restart or trace-mode hardware test was done.
+
+Successful pilot `f3caec01f978`: 120 seconds including setup and 20-second
+host cooldown; 87.25 seconds verified replay, 1955 iterations, about 380–400
+aggregate effective TFLOP/s. CPU package power remained ~20 W while CPU
+temperature rose from ~57.4 C before replay to 63.1 C at finish. Snapshot
+and report: `/tmp/tt-trace-success.sqlite3` and
+`/tmp/tt-trace-success-f3caec01f978.json` on nas642 and q4.
+
+Extended experiment `9560d60ec324` started Unix 1789056195.153, requested
+1200 seconds with the same conservative guards. It stopped after ~210
+seconds, including 175 seconds replay, when TT3 reached 75.1 C (75 C guard).
+CPU package power stayed about 20–21 W; CPU rose from ~60 C to 69.6 C.
+3839 replay iterations completed. CPU limits restored and worker exited0.
+No plateau was reached; do not report a measured equilibrium or claim the
+requested run-to-stability task complete. The shared temperature rise at
+near-constant CPU power is strong cross-heating evidence, consistent with
+the liquid loop. It cannot distinguish loop heat from heated inlet air alone.
+The model must retain the initially warm state from preceding tests.
+
+`tt_max/thermal_rc.py` now implements the physical differential equations:
+
+```
+C_i dT_i/dt = Q_i - G_i (T_i - W)
+C_w dW/dt = sum_i G_i (T_i - W) - H (W - A)
+```
+
+Optional room state:
+`C_room dA/dt = H (W-A) - H_room (A-A_out)`.
+This simplified room equation omits other room heat sources and direct
+device-to-air losses; use measured inlet air when available instead of
+fitting those missing effects arbitrarily. With constant heat and air,
+equilibrium satisfies `W=A+sum(Q)/H` and `T_i=W+Q_i/G_i`.
+The solver uses exact constant-input interval updates and explicit initial
+states. Positive physical parameters still need calibration; absolute coolant
+temperature, deposited-heat fractions and room parameters are not identified
+from the present records. Tests check equilibrium, warming-room behavior and
+input validation. A plateau check should require stable power and sustained
+small slopes, not just a flattened trace caused by throttling or guard stop.
+
+Recommended missing instrumentation: two Yocto-Meteo-V2-C units, one for
+room air away from exhaust and one for air entering the radiator; actual
+coolant temperature/flow is still preferable for isolating plumbing faults.
+
 ## Follow-up: guarded CPU pulse and validation
 
 CPU-only pilot `f886d5c9d64d` started at Unix 1789053424.8322458,
