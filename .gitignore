@@ -4,4 +4,5 @@ __pycache__/
 *.egg-info/
 results/
 dist/
+generated/
 .DS_Store
