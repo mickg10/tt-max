@@ -71,7 +71,7 @@ def normalize_config(raw):
     if unknown:
         raise ValueError(f"Unknown options: {', '.join(sorted(unknown))}")
     cfg.update(raw)
-    for key, low, high in (("duration", 1, 3600), ("cpu_workers", 0, os.cpu_count() or 1),
+    for key, low, high in (("duration", 1, 172800), ("cpu_workers", 0, os.cpu_count() or 1),
                            ("matrix_size", 256, 8192), ("temperature_limit", 40, 95)):
         value = cfg[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or int(value) != value or not low <= value <= high:
@@ -156,12 +156,15 @@ class Engine:
             with self.lock:
                 self.telemetry.update(values)
                 if self.run and self.run["state"] == "running":
-                    self.run["samples"].append(copy.deepcopy(self.telemetry))
+                    samples = self.run["samples"]
+                    interval = max(1, self.run["duration"] / 3600)
+                    if not samples or values["timestamp"] - samples[-1]["timestamp"] >= interval:
+                        samples.append(copy.deepcopy(self.telemetry))
             self.shutdown.wait(1)
 
     def snapshot(self):
         with self.lock:
-            run = copy.deepcopy(self.run)
+            run = copy.deepcopy({k: v for k, v in self.run.items() if k != "samples"}) if self.run else None
             if run:
                 run["elapsed"] = min(run["duration"], (run.get("finished_at") or time.time()) - run["started_at"])
                 run["progress"] = round(100 * run["elapsed"] / run["duration"], 1)

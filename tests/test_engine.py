@@ -13,7 +13,7 @@ from tt_max.engine import Engine, normalize_config, tt_snapshot
 
 
 @pytest.mark.parametrize("cfg", [
-    {"duration": 0}, {"duration": 3601}, {"duration": float("nan")},
+    {"duration": 0}, {"duration": 172801}, {"duration": float("nan")},
     {"memory_gb": -1}, {"memory_gb": float("inf")}, {"memory_gb": 1e9},
     {"cpu_workers": -1}, {"tt": "true"}, {"matrix_size": 1025},
     {"tt_devices": "0,0"}, {"tt_devices": "-1"},
@@ -22,6 +22,11 @@ from tt_max.engine import Engine, normalize_config, tt_snapshot
 def test_invalid_limits(cfg):
     with pytest.raises(ValueError):
         normalize_config(cfg)
+
+
+def test_48_hour_limit():
+    assert normalize_config({"duration": 172800})["duration"] == 172800
+    assert normalize_config({})["duration"] == 60
 
 
 def test_board_power_deduplicated(monkeypatch):

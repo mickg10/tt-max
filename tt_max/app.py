@@ -90,7 +90,7 @@ def main():
     web.add_argument("--port", type=int, default=8765)
     web.add_argument("--token", default=os.environ.get("TT_MAX_TOKEN"), help="Optional access token (prefer TT_MAX_TOKEN env); unset allows unauthenticated access")
     run = subs.add_parser("run", help="Run a benchmark in the terminal")
-    run.add_argument("--duration", type=int, default=60, help="Total time budget, 1–3600 seconds; default 60")
+    run.add_argument("--duration", type=int, default=60, help="Total time budget, 1–172800 seconds (48 hours); default 60")
     run.add_argument("--cpu-workers", type=int, default=os.cpu_count() or 1)
     run.add_argument("--memory-gb", type=float, default=1)
     run.add_argument("--no-tt", action="store_true")
