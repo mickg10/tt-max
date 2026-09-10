@@ -1,5 +1,25 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Live measured-power fit, run 2ba8b0226ea4
+
+Read-only snapshot `/tmp/tt-soak-live.sqlite3` on nas642/q4 captures the
+first ~462 seconds. `uv run python -m tt_max.thermal_fit
+/tmp/tt-soak-live.sqlite3 2ba8b0226ea4` fits CPU response to mean TT chip-rail
+power, with free initial state and offset, ten-second bins, excluding first
+60 seconds of setup. CPU package power bin means span 19.75–20.61 W.
+Training through300s gives effective tau192s, held-out RMSE0.473 C over the
+remaining ~155s. Fitting all available data gives tau222s. However, apparent
+gain changes from .0362 to .00124 C per TT chip-rail watt and extrapolated
+zero-TT-power CPU floor from58 to76 C. This is poor parameter identification,
+not a physical gain/floor result. Nearly constant input makes free floor and
+power gain confounded. Do not claim absolute water temperature or radiator
+resistance from this fit. Need distinct power levels/cooldown and ambient.
+
+Run remains under original eight-hour supervisor; latest live state must be
+queried before acting. Initial minute-to-minute CPU slopes slowed from4.49
+to3.11 C/min; TT summed rail power medians declined495→478W and chip clocks
+also fell, so slowdown is not solely attributable to thermal equilibration.
+
 ## Eight-hour follow-up (user authorized 90 C cutoffs)
 
 User requested 8 hours, terminating on CPU or any TT at 90 C. Added native
