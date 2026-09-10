@@ -84,6 +84,28 @@ def test_http_token_and_origin():
         engine.close()
 
 
+@pytest.mark.parametrize("token", [None, ""])
+def test_network_listener_without_token(token):
+    engine = Engine()
+    server = ThreadingHTTPServer(("0.0.0.0", 0), handler(engine, token))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    try:
+        headers = {"Host": "quietbox.example:8765"}
+        assert "telemetry" in json.load(urlopen(Request(root + "/api/status", headers=headers)))
+        headers.update({"Content-Type": "application/json", "Origin": "http://quietbox.example:8765"})
+        assert urlopen(Request(root + "/api/stop", data=b"{}", headers=headers)).status == 200
+        headers["Origin"] = "https://evil.example"
+        with pytest.raises(HTTPError) as exc:
+            urlopen(Request(root + "/api/stop", data=b"{}", headers=headers))
+        assert exc.value.code == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+        engine.close()
+
+
 def test_cancel_during_preflight_starts_no_workers(monkeypatch):
     engine = Engine(tt_python=sys.executable)
     def preflight():

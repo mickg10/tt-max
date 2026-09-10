@@ -23,7 +23,7 @@ cd ~/src/tt-max
 ~/.local/bin/uv run tt-max
 ```
 
-Open `http://localhost:8765` locally. For a trusted network listener, set `TT_MAX_TOKEN` to a random access token, then run `uv run tt-max web --host 0.0.0.0`. Enter the token in the dashboard. The built-in server is HTTP; use an SSH tunnel or TLS reverse proxy on untrusted networks. Cross-origin mutations are rejected. No external frontend scripts or services are used.
+Open `http://localhost:8765` locally. For a network listener, run `uv run tt-max web --host 0.0.0.0`. When `TT_MAX_TOKEN` is unset or empty, no token is required: anyone who can reach the dashboard can start benchmarks. Set `TT_MAX_TOKEN` to a random access token to require authentication, then enter it in the dashboard. The built-in server is HTTP; use an SSH tunnel or TLS reverse proxy on untrusted networks. Cross-origin mutations are rejected. No external frontend scripts or services are used.
 
 ## TT environment
 

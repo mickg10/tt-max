@@ -38,7 +38,7 @@ def handler(engine, token):
                 self.send(403, {"error": "Cross-origin requests are not allowed"})
                 return False
             # Protect localhost mode against hostile DNS rebinding.
-            if not token and self.headers.get("Host", "").split(":")[0] not in ("localhost", "127.0.0.1"):
+            if not token and self.server.server_address[0] in ("localhost", "127.0.0.1") and self.headers.get("Host", "").split(":")[0] not in ("localhost", "127.0.0.1"):
                 self.send(403, {"error": "Use localhost, or configure an access token"})
                 return False
             return True
@@ -88,7 +88,7 @@ def main():
     web = subs.add_parser("web", help="Launch live dashboard (default)")
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8765)
-    web.add_argument("--token", default=os.environ.get("TT_MAX_TOKEN"), help="Access token; required on non-loopback hosts (prefer TT_MAX_TOKEN env)")
+    web.add_argument("--token", default=os.environ.get("TT_MAX_TOKEN"), help="Optional access token (prefer TT_MAX_TOKEN env); unset allows unauthenticated access")
     run = subs.add_parser("run", help="Run a benchmark in the terminal")
     run.add_argument("--duration", type=int, default=60, help="Total time budget, 1–3600 seconds; default 60")
     run.add_argument("--cpu-workers", type=int, default=os.cpu_count() or 1)
@@ -103,7 +103,7 @@ def main():
     if not args.command:
         args.command, args.host, args.port, args.token = "web", "127.0.0.1", 8765, os.environ.get("TT_MAX_TOKEN")
     if args.command == "web" and args.host not in ("127.0.0.1", "localhost") and not args.token:
-        parser.error("Set TT_MAX_TOKEN or --token when listening beyond localhost")
+        print("Warning: no access token; anyone who can reach this dashboard can start benchmarks.", flush=True)
     engine = Engine(args.tt_python)
     def interrupted(*_):
         raise KeyboardInterrupt
