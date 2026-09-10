@@ -2,6 +2,13 @@
   "run_id": "2ba8b0226ea4",
   "run_started_at_unix": 1789056806.2019544,
   "forecast_issued_at_utc": "2026-09-10T17:51:42Z",
+  "run_outcome": {
+    "state": "cancelled",
+    "reason": "User requested ending the soak",
+    "finished_at_unix": 1789063613.4148362,
+    "elapsed_seconds": 6807.212881803513,
+    "prospective_forecast_status": "Not evaluated: load was stopped before the first forecast window; do not score cooldown as continued-load forecasting error"
+  },
   "purpose": "Frozen descriptive model comparison; not physical parameter identification or a temperature safety limit",
   "sensor": "CPU Tctl, median of five-minute windows",
   "time_unit": "minutes since run start",

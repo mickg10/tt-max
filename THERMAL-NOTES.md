@@ -1,5 +1,56 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## User-ended soak and recorded shutdown transition (18:06:53 UTC)
+
+User requested ending the soak. Stopped only q4 run `2ba8b0226ea4` through
+`POST /api/stop` after revalidating its identity. Terminal state `cancelled`,
+no error, finished Unix1789063613.4148362 after6807.21 s (113.45 min), not
+the originally planned8 hours. TT worker39665 exited; supervisor
+`tt-thermal-soak-8h.service` became inactive with Result=success, MainPID0.
+All CPU scaling maximums were restored to5582301 kHz. The native recorder
+and Grafana collection continue; no new load was launched and q2/3 were
+not stopped. Recorded active/stopping maxima: CPU82.125 C and TT chips
+84.2/86.6/84.5/86.2 C. No90 C cutoff was reached.
+
+SQLite online backup: `/tmp/tt-soak-stop-2ba8b0226ea4.sqlite3` on q4, copied
+to NAS `/tmp/tt-soak-stop-2ba8b0226ea4.utwMmP/telemetry.sqlite3` with an
+`/api/report` export alongside as `report.json`. Snapshot size63,717,376
+bytes; SQLite quick_check returnedok. Includes201.72 s after finish; the
+live database continues recording subsequent cooldown. Maximum intersample
+gap during this run plus captured cooldown was1.083 s.
+
+The recorded transition (medians within each window) is:
+
+| Time relative to finished_at | CPU C | Mean TT C | CPU minus mean TT C | CPU package W | Summed TT rail W |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| -60 to-5 s | 82.125 | 84.550 | -2.450 | 20.811 | 430 |
+| +5 to+15 s | 82.812 | 72.062 | 10.675 | 19.292 | 136 |
+| +20 to+40 s | 81.375 | 70.138 | 11.200 | 19.274 | 137 |
+| +55 to+75 s | 78.312 | 66.475 | 11.763 | 18.950 | 138 |
+| +115 to+135 s | 74.125 | 61.812 | 12.200 | 19.081 | 127 |
+| +175 to+195 s | 70.812 | 58.263 | 12.575 | 18.812 | 120 |
+
+The rapid TT drop before CPU falls, followed by both cooling, supports
+local TT self-heating superimposed on a shared cooling response. These
+are not direct water-temperature readings. Idle TT power remains nonzero
+and declines during cooldown; the restored CPU frequency limit and any
+monitoring/analysis CPU work must be accounted for in subsequent fits.
+At about5.7 min after stopping, API readings were CPU65.25 C and TT
+51.2/53.1/51.0/53.2 C, with no recording error.
+
+The user also supplied approximate room temperature20 C at the original
+start, when TT temperature was roughly38 C. This is a useful user-reported
+initial boundary anchor, not a time series or a timestamp-matched measurement
+at the start of this already-warm113-minute run. Asked for another reading
+at the same location. The18 C chip-to-room difference combines idle local
+self-heating and the loop/inlet-to-room rise; it is not a measured radiator
+delta-T or heat-transfer efficiency.
+
+The120/180/240-minute heating forecasts below are invalidated by this
+user-requested load change before the first forecast window. Preserve their
+parameters, but do not score the cooler unloaded temperatures against them.
+The thermal goal remains in progress through cooldown and model assessment.
+
 ## Revised mass constraint and late-tail forecasts (17:51 UTC)
 
 User revised the estimate to **3–4 litres of water in a roughly 30 lb
