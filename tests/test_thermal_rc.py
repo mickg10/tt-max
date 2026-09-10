@@ -52,3 +52,34 @@ def test_direct_room_heat_requires_room_state():
     with pytest.raises(ValueError, match='room state'):
         simulate([0, 1], [[0], [0]], [20, 20], [10, 100], [20], 10,
                  [20, 20], room_heat_w=[0, 0])
+
+
+def test_unknown_absolute_reference_has_a_temperature_shift_ambiguity():
+    t = np.arange(0, 1800, 10)
+    q = np.column_stack((np.full(len(t), 20.),
+                         np.where(t < 900, 450., 70.)))
+    common = dict(times=t, heat_w=q, capacities=[40, 80, 15000],
+                  block_conductances=[4, 6], radiator_conductance=25,
+                  room_capacity=200000, room_loss=30)
+    original = simulate(air_c=np.full(len(t), 20),
+                        initial_c=[50, 45, 35, 22], **common)
+    shifted = simulate(air_c=np.full(len(t), 27),
+                       initial_c=[57, 52, 42, 29], **common)
+    # With an unknown common sensor offset and unmeasured air boundary,
+    # die outputs alone cannot choose between these absolute temperatures.
+    assert shifted - 7 == pytest.approx(original, abs=1e-8)
+
+
+def test_unknown_deposited_heat_scale_cannot_identify_absolute_capacity():
+    t = np.arange(0, 1800, 10)
+    q = np.column_stack((np.full(len(t), 20.),
+                         np.where(t < 900, 450., 70.)))
+    common = dict(times=t, air_c=np.full(len(t), 20),
+                  initial_c=[50, 45, 35, 22])
+    original = simulate(heat_w=q, capacities=[40, 80, 15000],
+                        block_conductances=[4, 6], radiator_conductance=25,
+                        room_capacity=200000, room_loss=30, **common)
+    scaled = simulate(heat_w=q * .5, capacities=[20, 40, 7500],
+                      block_conductances=[2, 3], radiator_conductance=12.5,
+                      room_capacity=100000, room_loss=15, **common)
+    assert scaled == pytest.approx(original, abs=1e-8)

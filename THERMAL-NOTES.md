@@ -1,5 +1,61 @@
 # Quietbox4 thermal investigation — 2026-09-10
 
+## Conditional modal model and unused late-cooldown check
+
+The preceding goal turn made progress by stopping the requested run,
+preserving its data and checking the initial cooldown. This follow-up adds
+an offline causal, nonnegative-gain modal fitting implementation, explicit
+fixed-reference scenarios, and a later temperature check. It does not
+restart a load or change the running recorder.
+
+The readable model/assessment is now `THERMAL-MODEL.md`. The physical
+energy-balance model remains `tt_max/thermal_rc.py`; the new
+`tt_max/thermal_modes.py` is an effective electrical-input/CPU-output model,
+not a source of absolute coolant temperatures. Tests cover exact synthetic
+recovery, chronological holdout isolation, nonnegative gains, input causality,
+fixed references, search-boundary/rank diagnostics, and physical-model
+temperature/heat-scale ambiguities. Full suite: 69 passed in 10.40 s.
+
+Data: 885 ten-second bins beginning 60 s after the long run started and
+ending 35 min after its user-requested stop. Training ends 5 min after stop.
+Unconstrained-reference one/two-mode fits predict later cooling poorly,
+despite small training errors. Fixing the independently observed original
+idle CPU reference to54.25 C and each proxy's corresponding idle power
+substantially improves predictions. This is an explicitly conditional
+ambient/host-equivalence scenario, not measured inlet-air constancy.
+
+All six fixed-reference models and the protocol were saved before querying
+the previously unused35–45-minute interval, evaluated at18:57:17 UTC. No
+model was refitted on its60 bins; actual electrical power remains an input.
+CPU median in that interval55.0 C, package mean18.78 W. One/two-mode late
+RMSE: chip rails1.648/1.655 C; same-board minimum0.169/0.220 C; same-board
+mean1.368/1.939 C. No claim of an unconditional workload forecast or proof
+of a second physical mass follows from these numbers. Replaying all saved
+parameters and later scores from the885+60 saved bins was verified.
+
+Artifacts: `thermal-analysis/20260910-q4-modal-check.json` and
+`thermal-analysis/20260910-q4-modal-late-evaluation.json`. The former also
+retains the unsuccessful free-reference comparisons. Do not overwrite
+those with only the best-looking model or relabel selection data as unseen.
+
+The apparently favorable board-minimum proxy is especially uncertain:
+between40–45 and85–90 run minutes its average rises905.73→937.09 W, whereas
+the mean-of-duplicates rises1057.47→1067.60 W. Of the minimum's31.36 W rise,
+21.23 W is the paired reports' disagreement narrowing rather than their
+midpoint rising. Its model reproduces the40–90-minute CPU slope well
+(predicted0.0286 versus observed0.0295 C/min), but this does not prove that
+real board power drift explains the tail or excludes room heating.
+
+Completion audit: model equations, executable solver, bounded-regime
+input/output estimation, recording, frozen data and limited temperature
+prediction checks are present and verified. The shared-sink heating
+evidence is strong. Physical water temperature, the liquid heat fraction,
+and the room-versus-internal share of the slow tail are still unverified.
+The overall identification goal stays active, with independent inlet-air
+and coolant/heat-input measurements as the remaining gate. No further
+uninstrumented stress run is authorized by this continuation. Passive
+recording stays on; the cancelled run is not a live job to wait on or restart.
+
 ## Passive cooldown assessment (18:36 UTC; no load restarted)
 
 The user-ended run remains cancelled. The TT worker reported its final

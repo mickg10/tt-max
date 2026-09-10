@@ -121,6 +121,11 @@ Scrape `GET /api/history?after=0&limit=1000`, using the returned `next_after` as
 
 On native Linux services, root can install `power-counter-access.py` and run it before service start with the dedicated service group as its argument. This changes only group ownership/read permission of RAPL `energy_uj` files, not power limits. Sysfs permissions may reset at reboot/device re-creation. Do not make counters world-readable or run the entire dashboard as root solely for this access.
 
+See [Thermal model and measured validation](THERMAL-MODEL.md) for the quietbox4
+investigation, physical equations, conditional temperature models and their
+identification limits. These offline models do not replace runtime thermal
+guards or turn device temperatures into measured coolant temperatures.
+
 `--output results/run.json` saves configuration, per-worker iterations/rates/exit status, logs and sampled telemetry. The dashboard exposes the most recent full report at authenticated `GET /api/report`; `GET /api/status` returns the compact live view. `POST /api/start` accepts the CLI-equivalent JSON config; `POST /api/stop` accepts `{}`. Both require `Content-Type: application/json`.
 
 ```bash
