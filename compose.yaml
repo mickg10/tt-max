@@ -1,0 +1,57 @@
+name: tt-max
+services:
+  tt-max:
+    build: .
+    image: tt-max:local
+    restart: unless-stopped
+    init: true
+    # Host PID view lets TT-SMI see workloads outside the container.
+    pid: host
+    ipc: host
+    network_mode: host
+    hostname: ${TT_MAX_HOSTNAME:-quietbox}
+    command: ["web", "--host", "${TT_MAX_BIND:-0.0.0.0}", "--port", "${TT_MAX_PORT:-8765}"]
+    environment:
+      TT_MAX_TOKEN: ${TT_MAX_TOKEN:-}
+      TT_MAX_TT_PYTHON: /opt/tenstorrent/venv/bin/python
+      TT_MAX_HEALTH_PORT: ${TT_MAX_PORT:-8765}
+      TT_MAX_HEALTH_BIND: ${TT_MAX_BIND:-0.0.0.0}
+    cap_drop: [ALL]
+    cap_add: [SYS_PTRACE, IPC_LOCK]
+    security_opt: ["no-new-privileges:true"]
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+    devices:
+      - /dev/tenstorrent:/dev/tenstorrent:rw
+    volumes:
+      # Reuse the verified host Python/TTNN/SFPI stack; never install KMD/flash in a container.
+      - type: bind
+        source: /opt/tenstorrent
+        target: /opt/tenstorrent
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+      # Same inode as native controllers: prevents overlapping host/container runs.
+      - type: bind
+        source: /tmp/tt-max.run.lock
+        target: /tmp/tt-max.run.lock
+        read_only: true
+        bind: {create_host_path: false}
+      - cache:/root/.cache
+      - reports:/reports
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import os,urllib.request; host=os.environ.get('TT_MAX_HEALTH_BIND','0.0.0.0'); host='127.0.0.1' if host=='0.0.0.0' else host; urllib.request.urlopen('http://' + host + ':' + os.environ.get('TT_MAX_HEALTH_PORT','8765') + '/',timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+volumes:
+  cache:
+  reports:

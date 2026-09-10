@@ -6,3 +6,4 @@ results/
 dist/
 generated/
 .DS_Store
+.env

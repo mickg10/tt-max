@@ -25,6 +25,45 @@ cd ~/src/tt-max
 
 Open `http://localhost:8765` locally. For a network listener, run `uv run tt-max web --host 0.0.0.0`. When `TT_MAX_TOKEN` is unset or empty, no token is required: anyone who can reach the dashboard can start benchmarks. Set `TT_MAX_TOKEN` to a random access token to require authentication, then enter it in the dashboard. The built-in server is HTTP; use an SSH tunnel or TLS reverse proxy on untrusted networks. Cross-origin mutations are rejected. No external frontend scripts or services are used.
 
+## Docker Compose (Linux QuietBox hosts)
+
+The image contains the controller and its locked Python dependencies. Compose mounts the already-tested `/opt/tenstorrent` runtime **read-only**, including TT-NN, its Python interpreter and SFPI. KMD and firmware remain host-managed. This is not a portable, self-contained TT-NN image: use the verified QuietBox layout described below.
+
+```bash
+python3 docker-preflight.py
+docker compose build
+# Set the real host name; optional token and listener settings are in .env.example.
+TT_MAX_HOSTNAME=tt-quietbox4 docker compose up -d
+docker compose ps
+docker compose logs --tail 100
+```
+
+The native service and container cannot both bind port 8765. For a deliberate cutover, stop any benchmark, run `sudo systemctl stop tt-max`, then `docker compose up -d`. Only after validation disable the native service with `sudo systemctl disable tt-max`. Roll back with `docker compose down` followed by `sudo systemctl enable --now tt-max`. These actions are manual; the Compose files never stop host services themselves.
+
+For monitoring-only validation alongside the native service:
+
+```bash
+TT_MAX_PORT=18765 TT_MAX_BIND=127.0.0.1 docker compose -p tt-max-validation up -d
+# No benchmark starts on launch. Query the test dashboard through localhost/SSH.
+TT_MAX_PORT=18765 TT_MAX_BIND=127.0.0.1 docker compose -p tt-max-validation down
+```
+
+Requirements and isolation boundaries:
+
+- Ubuntu 24.04 container userspace, Linux Docker Engine and Compose. The current q2/3 shared Python under `/opt/tenstorrent/python` and q4 `/usr/bin/python3.12` layouts are supported. A venv symlink into a private home is rejected by preflight.
+- All TT devices are exposed, with host PID/IPC/network namespaces so TT-SMI sees other processes and host telemetry. This is a **trusted host-management workload**, not an isolation boundary for untrusted users. No `privileged` mode, Docker socket, IPMI device, or writable host sysfs is granted. Capabilities are limited to process inspection and memory locking.
+- The read-only bind of `/tmp/tt-max.run.lock` shares the exact native-controller lock inode. Run preflight again after a host reboot if `/tmp` was cleared; recreate the container if the host lock inode changes. Never remove that lock while a controller is running.
+- Compiled-kernel caches persist in a named volume; each n300 board has a separate cache directory. `/reports` is another volume for CLI `--output /reports/run.json`. Dashboard report state remains in memory and is lost on restart.
+- Stop has a 30-second grace period for worker cleanup. Restart policy restarts the **idle dashboard**, never a benchmark. Health checks test HTTP availability, not accelerator computation.
+- Defaults remain a 60-second workload, 48-hour maximum, optional token, and port 8765 on all host interfaces. Set `TT_MAX_TOKEN` for authentication. Do not run simultaneous high-power tests across boxes sharing a circuit.
+
+To smoke-test the image on a machine without TT hardware, without starting load:
+
+```bash
+docker build -t tt-max:local .
+docker run --rm -p 127.0.0.1:18765:8765 tt-max:local
+```
+
 ## TT environment
 
 The controller installs just NumPy and psutil through `uv`. TT workers use the existing TT-NN Python environment, so installing this project does not upgrade a working driver/runtime stack.

@@ -20,3 +20,12 @@ TT-SMI 6.5.0 on this p300c host exposes power, temperature and clocks but no rea
 The n300 implementation was developed against the observed quietbox3 SMI board serials, non-adjacent chip pairs and sysfs PCI-to-device-node mapping supplied during host maintenance. No host was contacted, deployed to or stress-tested for this code-only update.
 
 `uv run pytest -q`: **36 passed** locally. New checks cover all four board owners, complete-board subsets, shuffled global chip and PCI node numbering, missing/ambiguous serial/PCI mappings, overlapping nodes, and unchanged Blackhole mesh planning. A subprocess integration test launches four independent probe workers, verifies distinct visibility/cache environments and local `0,1` IDs, waits for all four before starting CPU load, and confirms cleanup if one board worker fails. These probes do not emulate TT compute or claim eight-chip hardware validation; that acceptance remains for the host-maintenance owner.
+# Docker Compose validation — 2026-09-10
+
+- Image built successfully on nas642; Compose configuration validation and all 37 application tests passed.
+- Standalone container HTTP dashboard/info/status works without TT hardware and accurately reports TT unavailable.
+- Temporary Compose services on quietbox2, quietbox3 and quietbox4 used localhost port 18765 alongside unchanged native port 8765 services. Monitoring only; no load was started.
+- All three imported host TT-NN 0.78.0 and CPU PyTorch 2.14.0+cpu from the read-only runtime mount. TT-SMI returned 8/8/4 chips with no telemetry error. q3/q4 HTTP health checks passed; q2 runtime/HTTP checks passed.
+- n300 BDF-to-device-node sysfs mappings were visible inside the containers. Real host-held flock contention was correctly detected inside the q3/q4 containers using the same mounted lock inode.
+- Accelerator computation and long-duration stress **inside containers have not been validated**. Native hardware computation tests are separate; do not infer a 48-hour container soak from startup checks.
+- Temporary validation containers were stopped after checks. Native systemd services remain the production dashboards; no automatic cutover was performed.
